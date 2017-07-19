@@ -11,6 +11,7 @@ import (
 	backendlegacy "github.com/hashicorp/terraform/backend/legacy"
 	backendlocal "github.com/hashicorp/terraform/backend/local"
 	backendconsul "github.com/hashicorp/terraform/backend/remote-state/consul"
+	backendGCloud "github.com/hashicorp/terraform/backend/remote-state/gcloud"
 	backendinmem "github.com/hashicorp/terraform/backend/remote-state/inmem"
 	backendS3 "github.com/hashicorp/terraform/backend/remote-state/s3"
 	backendSwift "github.com/hashicorp/terraform/backend/remote-state/swift"
@@ -40,6 +41,7 @@ func init() {
 		"inmem":  func() backend.Backend { return backendinmem.New() },
 		"swift":  func() backend.Backend { return backendSwift.New() },
 		"s3":     func() backend.Backend { return backendS3.New() },
+		"gcloud": func() backend.Backend { return backendGCloud.New() },
 	}
 
 	// Add the legacy remote backends that haven't yet been convertd to
