@@ -9,9 +9,11 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/hashicorp/terraform/helper/pathorcontents"
+	"github.com/hashicorp/terraform/state"
 	"github.com/hashicorp/terraform/terraform"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -38,6 +40,7 @@ func parseJSON(result interface{}, contents string) error {
 type GCSClient struct {
 	bucket        string
 	path          string
+	lockPath      string
 	clientStorage *storage.Service
 }
 
@@ -56,6 +59,11 @@ func gcsFactory(conf map[string]string) (Client, error) {
 	pathName, ok := conf["path"]
 	if !ok {
 		return nil, fmt.Errorf("missing 'path' configuration")
+	}
+
+	lockPath, ok := conf["lock_path"]
+	if !ok {
+		lockPath = pathName + ".lock"
 	}
 
 	credentials, ok := conf["credentials"]
@@ -112,6 +120,7 @@ func gcsFactory(conf map[string]string) (Client, error) {
 		clientStorage: clientStorage,
 		bucket:        bucketName,
 		path:          pathName,
+		lockPath:      lockPath,
 	}, nil
 
 }
@@ -166,4 +175,22 @@ func (c *GCSClient) Delete() error {
 	err := c.clientStorage.Objects.Delete(c.bucket, c.path).Do()
 	return err
 
+}
+
+func (c *GCSClient) Lock(info *state.LockInfo) (string, error) {
+	obj, err := c.clientStorage.Objects.Insert(c.bucket, &storage.Object{Name: c.lockPath}).IfGenerationMatch(0).Media(strings.NewReader(info.String())).Do()
+	if err != nil {
+		return "", err
+	}
+
+	return strconv.FormatInt(obj.Generation, 10), nil
+}
+
+func (c *GCSClient) Unlock(id string) error {
+	gen, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return err
+	}
+
+	return c.clientStorage.Objects.Delete(c.bucket, c.lockPath).IfGenerationMatch(gen).Do()
 }
