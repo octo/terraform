@@ -13,7 +13,6 @@ import (
 
 	"github.com/hashicorp/terraform/helper/pathorcontents"
 	"github.com/hashicorp/terraform/terraform"
-	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2/jwt"
@@ -40,7 +39,6 @@ type GCSClient struct {
 	bucket        string
 	path          string
 	clientStorage *storage.Service
-	context       context.Context
 }
 
 func gcsFactory(conf map[string]string) (Client, error) {
