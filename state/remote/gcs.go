@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	multierror "github.com/hashicorp/go-multierror"
 	"github.com/hashicorp/terraform/helper/pathorcontents"
 	"github.com/hashicorp/terraform/state"
 	"github.com/hashicorp/terraform/terraform"
@@ -177,20 +178,73 @@ func (c *GCSClient) Delete() error {
 
 }
 
+// Lock creates a lock file on GCS by writing info in JSON formatting. File
+// creation is ensured using the ifGenerationMatch precondition. If a lock file
+// already exists, it is read and its LockInfo content is returned as part of a
+// state.LockError.
+// The returned string is the generation number of the lock file.
 func (c *GCSClient) Lock(info *state.LockInfo) (string, error) {
-	obj, err := c.clientStorage.Objects.Insert(c.bucket, &storage.Object{Name: c.lockPath}).IfGenerationMatch(0).Media(strings.NewReader(info.String())).Do()
+	buf := &bytes.Buffer{}
+	if err := json.NewEncoder(buf).Encode(info); err != nil {
+		return "", err
+	}
+
+	obj, err := c.clientStorage.Objects.Insert(c.bucket, &storage.Object{Name: c.lockPath}).IfGenerationMatch(0).Media(buf).Do()
 	if err != nil {
+		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == http.StatusPreconditionFailed {
+			return "", c.lockError(err)
+		}
+
 		return "", err
 	}
 
 	return strconv.FormatInt(obj.Generation, 10), nil
 }
 
+// Unlock removes the lock file from GCS. id is the generation of the file, as
+// returned by Lock(). If deleting the file fails, a LockError with additional
+// information is returned.
 func (c *GCSClient) Unlock(id string) error {
 	gen, err := strconv.ParseInt(id, 10, 64)
 	if err != nil {
-		return err
+		return &state.LockError{
+			Err: fmt.Errorf("invalid lock id %q: %v", id, err),
+		}
 	}
 
-	return c.clientStorage.Objects.Delete(c.bucket, c.lockPath).IfGenerationMatch(gen).Do()
+	if err := c.clientStorage.Objects.Delete(c.bucket, c.lockPath).IfGenerationMatch(gen).Do(); err != nil {
+		return c.lockError(err)
+	}
+
+	return nil
+}
+
+func (c *GCSClient) lockError(err error) *state.LockError {
+	lockErr := &state.LockError{
+		Err: err,
+	}
+
+	info, infoErr := c.lockInfo()
+	if infoErr != nil {
+		lockErr.Err = multierror.Append(lockErr.Err, fmt.Errorf("failed to retrieve lock info: %v", err))
+	} else {
+		lockErr.Info = info
+	}
+
+	return lockErr
+}
+
+func (c *GCSClient) lockInfo() (*state.LockInfo, error) {
+	res, err := c.clientStorage.Objects.Get(c.bucket, c.lockPath).Download()
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	info := &state.LockInfo{}
+	if err := json.NewDecoder(res.Body).Decode(info); err != nil {
+		return nil, err
+	}
+
+	return info, nil
 }

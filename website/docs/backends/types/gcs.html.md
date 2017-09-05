@@ -8,7 +8,7 @@ description: |-
 
 # gcs
 
-**Kind: Standard (with no locking)**
+**Kind: Standard (with locking via lock file)**
 
 Stores the state as a given key in a given bucket on [Google Cloud Storage](https://cloud.google.com/storage/).
 
@@ -52,3 +52,4 @@ The following configuration options are supported:
  * `bucket` - (Required) The name of the GCS bucket
  * `path` - (Required) The path where to place/look for state file inside the bucket
  * `credentials` / `GOOGLE_CREDENTIALS` - (Required) Google Cloud Platform account credentials in json format
+ * `lock_path` - (Optional) Path to the lock file; defaults to `<path>.lock`
