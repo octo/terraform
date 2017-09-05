@@ -122,7 +122,7 @@ func (c *GCSClient) Get() (*Payload, error) {
 
 	resp, err := c.clientStorage.Objects.Get(c.bucket, c.path).Download()
 	if err != nil {
-		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == 404 {
+		if gerr, ok := err.(*googleapi.Error); ok && gerr.Code == http.StatusNotFound {
 			log.Printf("[INFO] %s/%s not found", c.bucket, c.path)
 
 			return nil, nil
