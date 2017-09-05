@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -132,17 +132,13 @@ func (c *GCSClient) Get() (*Payload, error) {
 	}
 	defer resp.Body.Close()
 
-	var buf []byte
-	w := bytes.NewBuffer(buf)
-	n, err := io.Copy(w, resp.Body)
-	if err != nil {
-		log.Fatalf("[WARN] error buffering %q: %v", c.path, err)
-	}
-	log.Printf("[INFO] Downloaded %d bytes", n)
+	payload := &Payload{}
 
-	payload := &Payload{
-		Data: w.Bytes(),
+	payload.Data, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatalf("[ERR] error buffering %q: %v", c.path, err)
 	}
+	log.Printf("[INFO] Downloaded %d bytes", len(payload.Data))
 
 	// If there was no data, then return nil
 	if len(payload.Data) == 0 {
